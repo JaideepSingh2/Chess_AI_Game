@@ -12,11 +12,15 @@ from ui.status_display import StatusDisplay
 from code_logic.save_manager import SaveManager
 from ui.save_dialog import SaveDialog
 from ui.load_dialog import LoadDialog
+from ui.connection_dialog import ConnectionDialog
+from ui.online_lobby import OnlineLobby
+from multiplayer.network import NetworkClient, NetworkGame
+from multiplayer.online_multiplayer_game import OnlineMultiplayerGame
 
 def main():
     pygame.init()
     sound_manager = SoundManager()
-    board_width, board_height = 600, 600
+    board_width, board_height = 800, 800
     sidebar_width = 250
     screen_width = board_width + sidebar_width
     screen = pygame.display.set_mode((screen_width, board_height))
@@ -34,10 +38,168 @@ def main():
             run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, 'Human_vs_AI')
         elif choice == 'AI_vs_AI':
             run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, 'AI_vs_AI')
+        elif choice == 'online_multiplayer':
+            # Run online multiplayer
+            result = run_online_multiplayer(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager)
+            if result == 'main_menu':
+                continue
         elif choice.startswith('load_game:'):
             # Load and run a saved game
             game_name = choice[10:]  # Remove 'load_game:' prefix
             load_and_run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, game_name)
+
+
+def run_online_multiplayer(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager):
+    """Handle online multiplayer game flow"""
+    
+    # Show connection dialog
+    connection_dialog = ConnectionDialog(screen_width, board_height)
+    clock = pygame.time.Clock()
+    
+    while True:
+        dt = clock.tick(60)
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return 'main_menu'
+                
+            result = connection_dialog.handle_event(event)
+            if result is None:  # Cancel
+                return 'main_menu'
+            elif result is not False:  # Got connection info
+                server_address, use_ipv6 = result
+                break
+        else:
+            connection_dialog.update(dt)
+            screen.fill((30, 30, 30))
+            connection_dialog.draw(screen)
+            pygame.display.flip()
+            continue
+        break
+    
+    # Try to connect to server
+    network_client = NetworkClient()
+    
+    # Show connecting message
+    popup = Popup(screen, f"Connecting to {server_address}...")
+    popup.show()
+    
+    screen.fill((30, 30, 30))
+    popup.draw()
+    pygame.display.flip()
+    
+    success, message = network_client.connect(server_address, 26104)  # Default port
+    
+    if not success:
+        # Show error message
+        error_popup = Popup(screen, f"Connection failed: {message}", duration=5000)
+        error_popup.show()
+        
+        start_time = pygame.time.get_ticks()
+        while pygame.time.get_ticks() - start_time < 5000:
+            screen.fill((30, 30, 30))
+            if not error_popup.draw():
+                break
+            pygame.display.flip()
+            clock.tick(60)
+        
+        network_client.disconnect()
+        return 'main_menu'
+    
+    # Connected successfully, show lobby
+    try:
+        lobby = OnlineLobby(screen_width, board_height, network_client)
+        
+        while True:
+            dt = clock.tick(60)
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    network_client.disconnect()
+                    return 'main_menu'
+                    
+                result = lobby.handle_event(event)
+                if result == "disconnect":
+                    network_client.disconnect()
+                    return 'main_menu'
+                elif isinstance(result, tuple) and result[0] == "start_game":
+                    # Game is starting
+                    is_white = result[1]
+                    
+                    # Create network game
+                    network_game = NetworkGame(network_client)
+                    network_game.is_white = is_white
+                    network_game.game_active = True
+                    
+                    print(f"DEBUG: Starting game as {'White' if is_white else 'Black'}")
+                    
+                    # Start online game
+                    online_game = OnlineMultiplayerGame(
+                        screen, screen_width, board_height, sidebar_width,
+                        sound_manager, save_manager, network_game
+                    )
+                    
+                    game_result = online_game.run()
+                    
+                    # Game ended, return to lobby or main menu
+                    if game_result == 'main_menu':
+                        network_client.disconnect()
+                        return 'main_menu'
+                    else:
+                        # Return to lobby for another game
+                        lobby = OnlineLobby(screen_width, board_height, network_client)
+                        break
+            
+            # Check for lobby updates
+            lobby_result = lobby.update()
+            if isinstance(lobby_result, tuple) and lobby_result[0] == "start_game":
+                # Game is starting from update (when we sent the request)
+                is_white = lobby_result[1]
+                
+                # Create network game
+                network_game = NetworkGame(network_client)
+                network_game.is_white = is_white
+                network_game.game_active = True
+                
+                print(f"DEBUG: Starting game as {'White' if is_white else 'Black'}")
+                
+                # Start online game
+                online_game = OnlineMultiplayerGame(
+                    screen, screen_width, board_height, sidebar_width,
+                    sound_manager, save_manager, network_game
+                )
+                
+                game_result = online_game.run()
+                
+                # Game ended, return to lobby or main menu
+                if game_result == 'main_menu':
+                    network_client.disconnect()
+                    return 'main_menu'
+                else:
+                    # Return to lobby for another game
+                    lobby = OnlineLobby(screen_width, board_height, network_client)
+                    break
+            
+            screen.fill((30, 30, 30))
+            lobby.draw(screen)
+            pygame.display.flip()
+            
+    except Exception as e:
+        # Handle any errors
+        print(f"ERROR in online multiplayer: {e}")
+        error_popup = Popup(screen, f"Error: {str(e)}", duration=5000)
+        error_popup.show()
+        
+        start_time = pygame.time.get_ticks()
+        while pygame.time.get_ticks() - start_time < 5000:
+            screen.fill((30, 30, 30))
+            if not error_popup.draw():
+                break
+            pygame.display.flip()
+            clock.tick(60)
+        
+        network_client.disconnect()
+        return 'main_menu'
 
 def load_and_run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, game_name):
     """Load and run a saved game"""
@@ -79,6 +241,7 @@ def load_and_run_game(screen, screen_width, board_height, sidebar_width, sound_m
                 break
             pygame.display.flip()
             clock.tick(60)
+
 
 def run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, game_mode='Human_vs_Human', chess_board=None, game_rules=None):
     board_width = screen_width - sidebar_width

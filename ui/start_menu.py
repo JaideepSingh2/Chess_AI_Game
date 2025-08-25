@@ -20,11 +20,12 @@ class StartMenu:
         
         self.buttons = {
             'new_game': pygame.Rect(button_x, screen_height//4, button_width, button_height),
-            'load_game': pygame.Rect(button_x, screen_height//4 + spacing, button_width, button_height),
-            'quit': pygame.Rect(button_x, screen_height//4 + spacing * 2, button_width, button_height)
+            'online_multiplayer': pygame.Rect(button_x, screen_height//4 + spacing, button_width, button_height),
+            'load_game': pygame.Rect(button_x, screen_height//4 + spacing * 2, button_width, button_height),
+            'quit': pygame.Rect(button_x, screen_height//4 + spacing * 3, button_width, button_height)
         }
         
-        # Game mode selection buttons
+        # Game mode selection buttons (for new game)
         self.game_mode_buttons = {
             'Human_vs_Human': pygame.Rect(button_x, screen_height//4, button_width, button_height),
             'Human_vs_AI': pygame.Rect(button_x, screen_height//4 + spacing, button_width, button_height),
@@ -89,12 +90,14 @@ class StartMenu:
                         # Main menu
                         if self.buttons['new_game'].collidepoint(mouse_pos):
                             self.show_game_modes = True
+                        elif self.buttons['online_multiplayer'].collidepoint(mouse_pos):
+                            # Online multiplayer
+                            return 'online_multiplayer'
                         elif self.buttons['load_game'].collidepoint(mouse_pos):
                             # Check if there are saved games
                             saved_games = self.save_manager.get_saved_games()
                             if saved_games:
                                 self.load_dialog = LoadDialog(self.screen_width, self.screen_height, saved_games)
-                            # If no saved games, button does nothing (could show a message)
                         elif self.buttons['quit'].collidepoint(mouse_pos):
                             pygame.quit()
                             sys.exit()
@@ -126,8 +129,11 @@ class StartMenu:
                     
                     if button_name == 'load_game':
                         enabled = saved_games_exist
-                        
+                    
                     display_name = button_name.replace('_', ' ').title()
+                    if button_name == 'online_multiplayer':
+                        display_name = 'Online Multiplayer'
+                        
                     self.draw_button(button_rect, display_name, hover, enabled)
                     
                 # Show saved games count
