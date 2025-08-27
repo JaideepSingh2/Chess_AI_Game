@@ -7,8 +7,7 @@ class StatusDisplay:
         self.board_height = board_height
         self.sidebar_width = sidebar_width
         self.stats_sidebar_width = sidebar_width
-        self.font = pygame.font.Font(None, 24)  # Replace 24 with the desired font size
-
+        self.font = pygame.font.Font(None, 24)
         
         self.status_height = 140
         self.padding = 10
@@ -23,9 +22,7 @@ class StatusDisplay:
             'positions_per_second': 0
         }
         self.ai_stats_height = 160
-        # self.ai_stats_x_position = self.x_position - sidebar_width + self.padding  # Shift stats to the right
         self.ai_stats_x_position = self.x_position
-        # self.ai_stats_y_position = self.y_position + self.status_height - 200
         self.ai_stats_y_position = 0
         
         self.title_font_size = 22
@@ -66,7 +63,7 @@ class StatusDisplay:
         }
         
         self.current_message = ""
-        self.checking_piece = ""  
+        self.checking_piece = ""
         self.current_turn = ""
         self.message_type = "normal"
         self.display_time = 4000
@@ -140,40 +137,87 @@ class StatusDisplay:
             )
             screen.blit(value_surface, value_rect)
     
+
+
     def draw_move_history(self, screen, move_history):
-        line_height = 20  
-        box_height = 10 * line_height + 20  
+        """Draw move history in a yellow box with proper text formatting and clipping."""
+        line_height = 22  # Increased line height for better spacing
+        box_height = 10 * line_height + 30  # Added more padding
         box_width = self.sidebar_width - 20
         x = self.board_width + 10
-        y = self.board_height - box_height - 20  
+        y = self.board_height - box_height - 20
 
         background_rect = pygame.Rect(x, y, box_width, box_height)
-        pygame.draw.rect(screen, (255, 255, 0), background_rect, border_radius=10)  
-        pygame.draw.rect(screen, (0, 0, 0), background_rect, 2, border_radius=10)  
+        pygame.draw.rect(screen, (255, 255, 0), background_rect, border_radius=10)
+        pygame.draw.rect(screen, (0, 0, 0), background_rect, 2, border_radius=10)
 
-        header = self.font.render("Move History", True, (0, 0, 0))  
-        screen.blit(header, (x + 10, y + 10))  
+        # Draw header
+        header_font = pygame.font.Font(None, 24)
+        header = header_font.render("Move History", True, (0, 0, 0))
+        header_rect = header.get_rect(centerx=background_rect.centerx, top=y + 8)
+        screen.blit(header, header_rect)
+
+        # Create text area with proper bounds
+        text_area_x = x + 10
+        text_area_y = y + 35
+        text_area_width = box_width - 20
+        text_area_height = box_height - 45
+        text_area_rect = pygame.Rect(text_area_x, text_area_y, text_area_width, text_area_height)
+
+        # Create a surface for clipping text
+        text_surface = pygame.Surface((text_area_width, text_area_height))
+        text_surface.fill((255, 255, 0))  # Yellow background
+
         max_moves = 9
-        visible_moves = move_history[-max_moves:] 
-        text_y = y + 40  
+        visible_moves = move_history[-max_moves:] if move_history else []
 
-        for move in visible_moves:  
-            move_text = f"{move['color']} {move['piece']} {move['from']}"
-            text_surface = self.font.render(move_text, True, (0, 0, 0))  
-            screen.blit(text_surface, (x + 10, text_y))  
-            text_y += line_height  
+        if not visible_moves:
+            # Show "No moves yet" message
+            no_moves_font = pygame.font.Font(None, 20)
+            no_moves_text = no_moves_font.render("No moves yet", True, (100, 100, 100))
+            no_moves_rect = no_moves_text.get_rect(center=(text_area_width//2, text_area_height//2))
+            text_surface.blit(no_moves_text, no_moves_rect)
+        else:
+            # Draw moves with proper formatting
+            move_font = pygame.font.Font(None, 18)  # Slightly larger font
+            
+            for i, move in enumerate(visible_moves):
+                # Format move text more compactly
+                move_text = f"{move['color'][0].upper()}: {move['piece'][:3]} {move['from']}-{move['to']}"
+                if move['captured']:
+                    move_text += f" x{move['captured'][:3]}"
+                
+                # Ensure text fits within the available width
+                max_width = text_area_width - 10
+                
+                # Truncate text if too long
+                while move_font.size(move_text)[0] > max_width and len(move_text) > 8:
+                    if 'x' in move_text:
+                        # Remove capture info first
+                        move_text = move_text.split(' x')[0]
+                    else:
+                        move_text = move_text[:-4] + "..."
+                    
+                # Render and draw the text
+                text_rendered = move_font.render(move_text, True, (0, 0, 0))
+                text_y_pos = i * line_height
+                
+                # Only draw if within bounds
+                if text_y_pos + line_height <= text_area_height:
+                    text_surface.blit(text_rendered, (5, text_y_pos))
 
+        # Blit the clipped text surface to the main screen
+        screen.blit(text_surface, text_area_rect)
 
 
     def update_status(self, message, message_type="normal", checking_piece=None, current_turn=None):
         if message != self.current_message or message_type == "check":
             self.current_message = message
             self.message_type = message_type
-            
-            self.checking_piece = checking_piece  
+            self.checking_piece = checking_piece if checking_piece else ""
+            self.current_turn = current_turn if current_turn else ""
             self.message_start_time = pygame.time.get_ticks()
             self.should_display = True
-            self.current_turn = current_turn
 
     def draw(self, screen):
         self.draw_ai_stats(screen)
@@ -185,7 +229,6 @@ class StatusDisplay:
 
         if elapsed > self.display_time and self.message_type not in ['checkmate', 'stalemate']:
             self.should_display = False
-            self.current_message = ""
             return
 
         status_rect = pygame.Rect(
@@ -207,9 +250,9 @@ class StatusDisplay:
         title_surface = self.title_font.render(title_text, True, color_scheme['text'])
         title_rect = title_surface.get_rect(
             centerx=status_rect.centerx,
-            top=status_rect.top
+            top=status_rect.top + self.padding
         )
-        # screen.blit(title_surface, title_rect) #this is just the check message
+        screen.blit(title_surface, title_rect)
 
         separator_y = title_rect.bottom + 5
         pygame.draw.line(
@@ -220,17 +263,16 @@ class StatusDisplay:
             1
         )
 
-        # reduces height for check/checkmate to make room for action text
+        # Message box
         message_box_height = status_rect.height - separator_y - (self.padding * 3)
         if self.message_type in ['checkmate', 'check']:
-            message_box_height -= self.action_font.get_linesize() * 2
+            message_box_height += 20
 
         message_box_rect = pygame.Rect(
             status_rect.left + self.padding * 2,
-            # status_rect.top + separator_y + self.padding,
-            separator_y + self.padding * 10,
+            separator_y + self.padding,
             status_rect.width - (self.padding * 4),
-            message_box_height - 11 * self.padding
+            message_box_height
         )
 
         message_height = self.draw_wrapped_text(
@@ -241,68 +283,18 @@ class StatusDisplay:
             message_box_rect
         )
 
-        # the above line is where the _colour_ is in check + checkmate, _colour_ wins message is shown, way above where it should be
-
         if self.message_type == 'checkmate':
-
-            # pygame.draw.line(
-            # screen,
-            # color_scheme['border'],
-            # (status_rect.left + self.padding, separator_y + 20),
-            # (status_rect.right - self.padding, separator_y + 20),
-            # 1
-            # )
-            
-            action_box_rect = pygame.Rect(
-                status_rect.left + self.padding,
-                message_box_rect.top + self.padding,
-                status_rect.width - (self.padding * 2),
-                self.action_font.get_linesize() - 100
-            )
-
-            # self.draw_wrapped_text(
-            #     screen,
-            #     "Go back to main menu to start a new game",
-            #     self.action_font,
-            #     color_scheme['text'],
-            #     action_box_rect
-            # )
-
-            self.draw_wrapped_text(
-                screen,
-                f"{self.current_turn.capitalize()} wins! Go back to main menu to start a new game",
-                self.action_font,
-                color_scheme['text'],
-                action_box_rect
-            )
-
-            
+            action_text = "Game Over!"
+            action_surface = self.action_font.render(action_text, True, color_scheme['text'])
+            action_y = message_box_rect.bottom - action_surface.get_height()
+            screen.blit(action_surface, (message_box_rect.left, action_y))
 
         elif self.message_type == 'check' and self.checking_piece:
-            # pygame.draw.line(
-            # screen,
-            # color_scheme['border'],
-            # (status_rect.left + self.padding, separator_y),
-            # (status_rect.right - self.padding, separator_y),
-            # 1
-            # )
-
-            action_box_rect = pygame.Rect(
-                status_rect.left + self.padding,
-                message_box_rect.top + self.padding,
-                status_rect.width - (self.padding * 2),
-                self.action_font.get_linesize() - 100
-            )
-
-            self.draw_wrapped_text(
-                screen,
-                f"King is being checked by {self.checking_piece}",
-                self.action_font,
-                color_scheme['text'],
-                action_box_rect
-            )
-
-            
+            piece_text = f"by {self.checking_piece.capitalize()}"
+            piece_surface = self.action_font.render(piece_text, True, color_scheme['text'])
+            piece_y = message_box_rect.bottom - piece_surface.get_height()
+            screen.blit(piece_surface, (message_box_rect.left, piece_y))
+    
     def get_title_text(self):
         titles = {
             'normal': 'Game Status',
@@ -321,9 +313,7 @@ class StatusDisplay:
         
         for word in words:
             test_line = ' '.join(current_line + [word])
-            test_surface = font.render(test_line, True, color)
-            
-            if test_surface.get_width() <= max_width:
+            if font.size(test_line)[0] <= max_width:
                 current_line.append(word)
             else:
                 if current_line:
@@ -333,18 +323,16 @@ class StatusDisplay:
         if current_line:
             lines.append(' '.join(current_line))
         
-        line_spacing = 1.2  
+        line_spacing = 1.2
         total_height = len(lines) * (font.get_linesize() * line_spacing)
-        current_y = rect.top + (rect.height - total_height) // 2 
+        current_y = rect.top + (rect.height - total_height) // 2
         
         for line in lines:
-            text_surface = font.render(line, True, color)
-            text_rect = text_surface.get_rect(
-                centerx=rect.centerx,
-                top=current_y
-            )
-            surface.blit(text_surface, text_rect)
+            line_surface = font.render(line, True, color)
+            line_rect = line_surface.get_rect(centerx=rect.centerx, top=current_y)
+            surface.blit(line_surface, line_rect)
             current_y += font.get_linesize() * line_spacing
+            
         return total_height
 
     def clear(self):

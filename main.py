@@ -20,7 +20,7 @@ from multiplayer.online_multiplayer_game import OnlineMultiplayerGame
 def main():
     pygame.init()
     sound_manager = SoundManager()
-    board_width, board_height = 800, 800
+    board_width, board_height = 900, 900
     sidebar_width = 250
     screen_width = board_width + sidebar_width
     screen = pygame.display.set_mode((screen_width, board_height))
@@ -88,7 +88,7 @@ def run_online_multiplayer(screen, screen_width, board_height, sidebar_width, so
     popup.draw()
     pygame.display.flip()
     
-    success, message = network_client.connect(server_address, 26104)  # Default port
+    success, message = network_client.connect(server_address, 26104)
     
     if not success:
         # Show error message
@@ -142,7 +142,7 @@ def run_online_multiplayer(screen, screen_width, board_height, sidebar_width, so
                     game_result = online_game.run()
                     
                     # Game ended, return to lobby or main menu
-                    if game_result == 'main_menu':
+                    if game_result in ['main_menu', 'quit']:
                         network_client.disconnect()
                         return 'main_menu'
                     else:
@@ -172,7 +172,7 @@ def run_online_multiplayer(screen, screen_width, board_height, sidebar_width, so
                 game_result = online_game.run()
                 
                 # Game ended, return to lobby or main menu
-                if game_result == 'main_menu':
+                if game_result in ['main_menu', 'quit']:
                     network_client.disconnect()
                     return 'main_menu'
                 else:
@@ -200,6 +200,7 @@ def run_online_multiplayer(screen, screen_width, board_height, sidebar_width, so
         
         network_client.disconnect()
         return 'main_menu'
+
 
 def load_and_run_game(screen, screen_width, board_height, sidebar_width, sound_manager, save_manager, game_name):
     """Load and run a saved game"""
@@ -286,7 +287,7 @@ def run_game(screen, screen_width, board_height, sidebar_width, sound_manager, s
     stalemate_sound_played = False
 
     def draw_turn_indicator():
-        sidebar_color = (0, 0, 0) if game_rules.current_turn == 'white' else (255, 255, 255)
+        sidebar_color = (255, 255, 255) if game_rules.current_turn == 'white' else (0, 0, 0)
         pygame.draw.rect(screen, sidebar_color, (board_width, 0, sidebar_width, board_height))
 
     def update_game_status():
@@ -509,6 +510,7 @@ def run_game(screen, screen_width, board_height, sidebar_width, sound_manager, s
         if save_dialog:
             save_dialog.update(dt)
 
+
         # Draw everything
         screen.fill((255, 255, 255))
         chess_board.construct_board()
@@ -530,8 +532,11 @@ def run_game(screen, screen_width, board_height, sidebar_width, sound_manager, s
         chess_board.draw_pieces()
         draw_turn_indicator()
         update_game_status()
-        status_display.draw_move_history(screen, game_rules.move_history)
+        
+        # FIXED: Draw status display first, then move history
         status_display.draw(screen)
+        status_display.draw_move_history(screen, game_rules.move_history)
+        
         game_menu.draw_menu(screen)
 
         # Draw dialogs on top

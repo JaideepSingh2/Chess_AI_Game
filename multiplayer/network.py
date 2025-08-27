@@ -34,14 +34,15 @@ class NetworkClient:
                 response = data.decode('utf-8').strip()
                 
                 if response.startswith("key"):
+                    # Extract player ID
                     self.player_id = int(response[3:])
                     self.connected = True
                     
-                    # Now start the receive thread for ongoing communication
+                    # Start receive thread now
                     self.receive_thread = threading.Thread(target=self._receive_messages, daemon=True)
                     self.receive_thread.start()
                     
-                    return True, f"Connected as Player {self.player_id}"
+                    return True, f"Connected successfully as Player {self.player_id}"
                 elif response == "errBusy":
                     return False, "Server is full"
                 elif response == "errVer":
@@ -52,7 +53,7 @@ class NetworkClient:
                     return False, f"Unknown response: {response}"
                     
             except socket.timeout:
-                return False, "Handshake timeout"
+                return False, "Server did not respond"
                 
         except socket.timeout:
             return False, "Connection timeout"
@@ -91,20 +92,12 @@ class NetworkClient:
                 players = []
                 
                 for _ in range(player_count):
-                    player_data = self._wait_for_message(timeout=2.0)
-                    if player_data and len(player_data) >= 5:
-                        try:
-                            player_id = int(player_data[:-1])  # All except last character
-                            status_char = player_data[-1]      # Last character
-                            status = 'active' if status_char == 'a' else 'busy'
-                            
-                            players.append({
-                                'id': player_id,
-                                'status': status,
-                                'is_self': player_id == self.player_id
-                            })
-                        except ValueError:
-                            continue
+                    player_info = self._wait_for_message(timeout=2.0)
+                    if player_info and len(player_info) >= 5:
+                        # Parse player info: "1234a" -> id=1234, status=active
+                        player_id = int(player_info[:-1])
+                        status = "active" if player_info[-1] == 'a' else "busy"
+                        players.append({"id": player_id, "status": status})
                             
                 return players
             except ValueError:
@@ -191,8 +184,7 @@ class NetworkClient:
                     break
                     
                 message = data.decode('utf-8').strip()
-                if message and message != "........":  # Ignore heartbeat
-                    self.message_queue.put(message)
+                if message and message != "........":                    
                     self._handle_message(message)
                     
             except socket.timeout:
@@ -208,12 +200,13 @@ class NetworkClient:
         except queue.Empty:
             return None
 
+
     def _handle_message(self, message: str):
-        """Handle incoming messages with callbacks"""
+        """Handle incoming messages with callbacks - FIXED"""
         print(f"DEBUG: Received message: '{message}'")
         
-        # Handle game requests (format: "gr1234" from server)
-        if message.startswith("gr"):
+        # Handle game requests
+        if message.startswith("gr") and len(message) > 2:
             try:
                 requester_id = int(message[2:])
                 print(f"DEBUG: Game request from Player {requester_id}")
@@ -221,33 +214,75 @@ class NetworkClient:
                     self.callbacks["game_request"](requester_id)
             except ValueError:
                 pass
-        
-        # Handle game start confirmation
+                
+        # Handle game start
         elif message == "start":
             print("DEBUG: Received 'start' message - game beginning as White")
             if "game_start" in self.callbacks:
-                self.callbacks["game_start"](True)  # You're white (requested the game)
-        
+                self.callbacks["game_start"](True)  # White goes first
+                
+        # Handle game rejection  
         elif message == "nostart":
-            print("DEBUG: Received 'nostart' message - game request rejected")
+            print("DEBUG: Game request was rejected")
             if "game_rejected" in self.callbacks:
                 self.callbacks["game_rejected"]()
-        
-        # Handle moves and game actions
-        elif message in ["draw", "resign", "end", "quit", "close"]:
+                
+        # Handle game actions
+        elif message in ["draw", "resign", "end"]:
             print(f"DEBUG: Game action received: {message}")
             if "game_action" in self.callbacks:
                 self.callbacks["game_action"](message)
-        
-        # Handle chess moves (4+ chars, not special messages)
-        elif (len(message) >= 4 and 
-              message not in ["errKey", "close", "msgOk", "errPBusy"] and
-              not message.startswith("key") and
-              not message.startswith("enum") and
-              not message.startswith("gr")):
+                
+        # Handle chess moves - IMPROVED FILTERING
+        elif self._is_chess_move(message):
             print(f"DEBUG: Chess move received: {message}")
             if "move_received" in self.callbacks:
                 self.callbacks["move_received"](message)
+        else:
+            # All other messages go to queue for synchronous handling
+            # Don't print debug for routine server messages
+            if message not in ["pStat"] and not message.endswith(('a', 'b')):
+                print(f"DEBUG: Queuing message: {message}")
+            self.message_queue.put(message)
+
+
+
+    def _is_chess_move(self, message: str) -> bool:
+        """Check if message is a valid chess move - COMPLETELY FIXED"""
+        # Must be exactly 4 or 5 characters
+        if not message or len(message) < 4 or len(message) > 5:
+            return False
+            
+        # Exclude ALL known server messages
+        server_messages = {
+            "errKey", "close", "msgOk", "errPBusy", "pStat", "ready",
+            "start", "nostart", "draw", "resign", "end", "quit", "gmOk", "gmNo"
+        }
+        
+        if message in server_messages:
+            return False
+            
+        # Exclude messages with known prefixes
+        if (message.startswith(("enum", "gr", "key", "rg")) or 
+            (len(message) >= 2 and message.endswith(('a', 'b')) and message[:-1].isdigit())):
+            return False
+        
+        # Must be valid chess notation: letter+digit+letter+digit (optionally +letter)
+        try:
+            if (len(message) >= 4 and
+                message[0] in 'abcdefgh' and message[1] in '12345678' and
+                message[2] in 'abcdefgh' and message[3] in '12345678'):
+                
+                # If 5 characters, last must be promotion piece
+                if len(message) == 5:
+                    return message[4].lower() in 'qrbn'
+                else:
+                    return True
+        except:
+            pass
+            
+        return False
+
 
 
 class NetworkGame:
@@ -270,8 +305,9 @@ class NetworkGame:
         self.game_active = True
         
     def send_move(self, from_pos: tuple, to_pos: tuple, promotion: str = None):
-        """Send a move to the opponent"""
+        """Send a move to the opponent - Fixed implementation"""
         if not self.game_active:
+            print("DEBUG: Game not active, not sending move")
             return
             
         # Convert to algebraic notation
@@ -279,7 +315,8 @@ class NetworkGame:
         if promotion:
             move_str += promotion.lower()
             
-        self.network.send_move(move_str)
+        print(f"DEBUG: Sending move: {move_str}")
+        self.network.send_move(move_str)    
     
     def _pos_to_algebraic(self, pos: tuple) -> str:
         """Convert (row, col) position to algebraic notation"""
@@ -289,19 +326,36 @@ class NetworkGame:
     
     def _algebraic_to_pos(self, algebraic: str) -> tuple:
         """Convert algebraic notation to (row, col) position"""
-        col = ord(algebraic[0]) - ord('a')
+        if len(algebraic) != 2:
+            raise ValueError(f"Invalid algebraic notation: {algebraic}")
+        col = ord(algebraic[0].lower()) - ord('a')
         row = 8 - int(algebraic[1])
-        return (row, col)
+        if not (0 <= row < 8 and 0 <= col < 8):
+            raise ValueError(f"Position out of bounds: {algebraic}")
+        return (row, col)    
     
     def parse_move(self, move_str: str) -> tuple:
-        """Parse received move string"""
+        """Parse received move string - Fixed implementation"""
+        print(f"DEBUG: Parsing move string: '{move_str}'")
         if len(move_str) >= 4:
-            from_pos = self._algebraic_to_pos(move_str[:2])
-            to_pos = self._algebraic_to_pos(move_str[2:4])
-            promotion = move_str[4] if len(move_str) > 4 else None
-            return from_pos, to_pos, promotion
-        return None
-    
+            try:
+                from_alg = move_str[:2]
+                to_alg = move_str[2:4]
+                promotion = move_str[4] if len(move_str) == 5 else None
+                
+                from_pos = self._algebraic_to_pos(from_alg)
+                to_pos = self._algebraic_to_pos(to_alg)
+                
+                print(f"DEBUG: Parsed move: {from_pos} -> {to_pos}, promotion: {promotion}")
+                return (from_pos, to_pos, promotion)
+                
+            except Exception as e:
+                print(f"DEBUG: Failed to parse move: {e}")
+                return None
+        
+        print(f"DEBUG: Move string too short: {len(move_str)}")
+        return None    
+
     def offer_draw(self):
         """Offer a draw to opponent"""
         if self.game_active:

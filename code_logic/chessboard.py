@@ -18,38 +18,46 @@ class ChessBoard:
 
         self.pieces = self.initialize_pieces()
 
+
+
     def initialize_pieces(self):
         pieces = []
+        # WHITE pieces start on rows 6-7 (bottom), BLACK pieces start on rows 0-1 (top)
         white_positions = {
-            Rook: [(0, 0), (0, 7)],
-            Knight: [(0, 1), (0, 6)],
-            Bishop: [(0, 2), (0, 5)],
-            Queen: [(0, 3)],
-            King: [(0, 4)],
-            Pawn: [(1, col) for col in range(8)]
+            Rook: [(7, 0), (7, 7)],      # Bottom row (row 7)
+            Knight: [(7, 1), (7, 6)],    # Bottom row (row 7)
+            Bishop: [(7, 2), (7, 5)],    # Bottom row (row 7)
+            Queen: [(7, 3)],             # Bottom row (row 7)
+            King: [(7, 4)],              # Bottom row (row 7)
+            Pawn: [(6, col) for col in range(8)]  # Second from bottom (row 6)
         }
         black_positions = {
-            Rook: [(7, 0), (7, 7)],
-            Knight: [(7, 1), (7, 6)],
-            Bishop: [(7, 2), (7, 5)],
-            Queen: [(7, 3)],
-            King: [(7, 4)],
-            Pawn: [(6, col) for col in range(8)]
+            Rook: [(0, 0), (0, 7)],      # Top row (row 0)
+            Knight: [(0, 1), (0, 6)],    # Top row (row 0)
+            Bishop: [(0, 2), (0, 5)],    # Top row (row 0)
+            Queen: [(0, 3)],             # Top row (row 0)
+            King: [(0, 4)],              # Top row (row 0)
+            Pawn: [(1, col) for col in range(8)]  # Second from top (row 1)
         }
+        
+        # Initialize white pieces
         for piece_class, positions in white_positions.items():
             for position in positions:
                 piece_image = self.get_piece_image(piece_class.__name__.lower(), 'white')
                 pieces.append(piece_class(self.screen, piece_image, 'white', position))
-        # black piece init
+                
+        # Initialize black pieces
         for piece_class, positions in black_positions.items():
             for position in positions:
                 piece_image = self.get_piece_image(piece_class.__name__.lower(), 'black')
                 pieces.append(piece_class(self.screen, piece_image, 'black', position))
+                
         return pieces
 
+
     def get_piece_image(self, piece_name, color):
-        row = 0 if color == 'white' else 1
-        # changed black to white for correct invertion.
+        # FIXED: Correct color mapping - white should be row 0, black should be row 1
+        row = 1 if color == 'white' else 0  # Swapped this line
         col = {
             'king': 1,
             'queen': 0,
@@ -85,13 +93,6 @@ class ChessBoard:
         for piece in self.pieces:
             piece.draw(self.tile_size, self.board_offset_x, self.board_offset_y)
             
-            if isinstance(piece, Pawn):
-                if ((piece.color == 'white' and piece.position[0] == 6) or 
-                    (piece.color == 'black' and piece.position[0] == 1)):
-                    x = self.board_offset_x + piece.position[1] * self.tile_size
-                    y = self.board_offset_y + piece.position[0] * self.tile_size
-                    pygame.draw.rect(self.screen, (255, 0, 0), 
-                                (x, y, self.tile_size, self.tile_size), 2)
 
     def get_piece_at(self, position):
         for piece in self.pieces:

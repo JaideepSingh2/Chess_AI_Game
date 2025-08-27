@@ -167,8 +167,9 @@ class OnlineLobby:
         """Update lobby state"""
         current_time = pygame.time.get_ticks()
         
-        # Auto-refresh players
-        if current_time - self.last_refresh > self.refresh_interval:
+        # Don't auto-refresh if we have a pending request or incoming request
+        if (not self.pending_request and not self.incoming_request and 
+            current_time - self.last_refresh > self.refresh_interval):
             self._refresh_players()
             
         # Clear status message after 5 seconds
@@ -182,7 +183,8 @@ class OnlineLobby:
             return ("start_game", True)
             
         return None
-    
+
+
     def _get_accept_button(self) -> pygame.Rect:
         """Get accept button rect for incoming requests"""
         return pygame.Rect(

@@ -32,8 +32,10 @@ class Piece:
 
     ## Only for the pawn -> queen change
     def check_promotion(self, new_position, board):
-        if (self.color == 'white' and new_position[0] == 7) or \
-        (self.color == 'black' and new_position[0] == 0):
+        # White pawns promote when they reach row 0 (top)
+        # Black pawns promote when they reach row 7 (bottom)
+        if (self.color == 'white' and new_position[0] == 0) or \
+           (self.color == 'black' and new_position[0] == 7):
             self.promote(board)
     
     def is_valid_move(self, new_position, board):
@@ -101,22 +103,27 @@ class Pawn(Piece):
     def __init__(self, screen, image, color, position):
         super().__init__(screen, image, color, position)
         self.moved_once = False
-        self.direction = 1 if color == 'white' else -1
+        # White pawns move UP the board (decreasing row numbers)
+        # Black pawns move DOWN the board (increasing row numbers)
+        self.direction = -1 if color == 'white' else 1
             
     def get_possible_moves(self, board):
         possible_moves = []
         current_row, current_col = self.position
         new_row = current_row + self.direction
+        
         if 0 <= new_row < 8:
-            
+            # Forward move
             if not board.get_piece_at((new_row, current_col)):
                 possible_moves.append((new_row, current_col))
                 
+                # Two squares forward on first move
                 if not self.moved_once:
-                    second_row_ahead =  current_row + (2 * self.direction)               
+                    second_row_ahead = current_row + (2 * self.direction)               
                     if (0 <= second_row_ahead < 8 and not board.get_piece_at((second_row_ahead, current_col))):
                         possible_moves.append((second_row_ahead, current_col)) 
                                  
+        # Diagonal captures
         capture_squares = [
             (new_row, current_col - 1),
             (new_row, current_col + 1)
@@ -125,7 +132,7 @@ class Pawn(Piece):
         for capture_square in capture_squares:
             c_row, c_col = capture_square
             if 0 <= c_row < 8 and 0 <= c_col < 8:
-                target_piece = board.get_piece_at((capture_square))
+                target_piece = board.get_piece_at(capture_square)
                 if target_piece and target_piece.color != self.color:
                     possible_moves.append(capture_square)
                     
@@ -137,4 +144,3 @@ class Pawn(Piece):
         queen_image = board.get_piece_image('queen', self.color)
         new_queen = Queen(self.screen, queen_image, self.color, self.position)
         board.pieces.append(new_queen)
-     
